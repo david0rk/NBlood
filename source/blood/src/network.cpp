@@ -124,25 +124,23 @@ void netServerDisconnect(void)
     if (gNetMode != NETWORK_SERVER)
         return;
     for (int p = 0; p < kMaxPlayers; p++)
+    {
         if (gNetPlayerPeer[p])
-        {
-            bool bDisconnectStatus = false;
             enet_peer_disconnect_later(gNetPlayerPeer[p], 0);
-            if (enet_host_service(gNetENetServer, &event, 3000) > 0)
-            {
-                switch (event.type)
-                {
-                case ENET_EVENT_TYPE_DISCONNECT:
-                    bDisconnectStatus = true;
-                    break;
-                default:
-                    break;
-                }
-            }
-            if (!bDisconnectStatus)
-                enet_peer_reset(gNetPlayerPeer[p]);
-            gNetPlayerPeer[p] = NULL;
+    }
+
+    while (enet_host_service(gNetENetServer, &event, 3000) > 0)
+    {
+        switch (event.type)
+        {
+        case ENET_EVENT_TYPE_DISCONNECT:
+            enet_packet_destroy(event.packet);
+            break;
+        default:
+            enet_packet_destroy(event.packet);
+            break;
         }
+    }
 }
 
 void netClientDisconnect(void)
@@ -1014,15 +1012,7 @@ void netInitialize(bool bConsole)
 
                     enet_address_get_host_ip(&event.peer->address, ipaddr, sizeof(ipaddr));
                     initprintf("Client connected: %s:%u\n", ipaddr, event.peer->address.port);
-                    numplayers++;
-                    for (int i = 1; i < kMaxPlayers; i++)
-                    {
-                        if (gNetPlayerPeer[i] == NULL)
-                        {
-                            gNetPlayerPeer[i] = event.peer;
-                            break;
-                        }
-                    }
+                    gNetPlayerPeer[numplayers++] = event.peer;
                     if (!bConsole)
                     {
                         char buffer[128];
@@ -1037,23 +1027,12 @@ void netInitialize(bool bConsole)
 
                     enet_address_get_host_ip(&event.peer->address, ipaddr, sizeof(ipaddr));
                     initprintf("Client disconnected: %s:%u\n", ipaddr, event.peer->address.port);
-                    numplayers--;
-                    for (int i = 1; i < kMaxPlayers; i++)
+                    for (int i = 1; i < numplayers; i++)
                     {
                         if (gNetPlayerPeer[i] == event.peer)
-                        {
-                            gNetPlayerPeer[i] = NULL;
-                            for (int j = kMaxPlayers-1; j > i; j--)
-                            {
-                                if (gNetPlayerPeer[j])
-                                {
-                                    gNetPlayerPeer[i] = gNetPlayerPeer[j];
-                                    gNetPlayerPeer[j] = NULL;
-                                    break;
-                                }
-                            }
-                        }
+                            gNetPlayerPeer[i] = gNetPlayerPeer[numplayers-1];
                     }
+                    numplayers--;
                     if (!bConsole)
                     {
                         char buffer[128];
@@ -1099,8 +1078,6 @@ void netInitialize(bool bConsole)
         myconnectindex = 0;
         for (int i = 1; i < numplayers; i++)
         {
-            if (!gNetPlayerPeer[i])
-                continue;
             char *pPacket = packet;
             PutPacketByte(pPacket, BLOOD_SERVICE_CONNECTID);
             PutPacketByte(pPacket, i);
@@ -1166,6 +1143,7 @@ void netInitialize(bool bConsole)
                 switch (event.type)
                 {
                 case ENET_EVENT_TYPE_DISCONNECT:
+                    enet_packet_destroy(event.packet);
                     initprintf("Lost connection to server\n");
                     netDeinitialize();
                     netResetToSinglePlayer();
@@ -1201,6 +1179,7 @@ void netInitialize(bool bConsole)
                     break;
                 }
             }
+            enet_host_service(gNetENetClient, NULL, 0);
         }
         enet_host_service(gNetENetClient, NULL, 0);
         initprintf("Successfully connected to server\n");
@@ -1255,21 +1234,22 @@ void netUpdate(void)
             case ENET_EVENT_TYPE_DISCONNECT:
             {
                 int nPlayer;
+                enet_packet_destroy(event.packet);
                 for (nPlayer = connectpoint2[connecthead]; nPlayer >= 0; nPlayer = connectpoint2[nPlayer])
                     if (gNetPlayerPeer[nPlayer] == event.peer)
+                    {
+                        gNetPlayerPeer[nPlayer] = NULL;
                         break;
+                    }
 
-                for (int p = 0; p < kMaxPlayers; p++)
-                    if (gNetPlayerPeer[p] == event.peer)
-                        gNetPlayerPeer[p] = NULL;
                 if (nPlayer >= 0)
                 {
+                    netPlayerQuit(nPlayer);
                     // TODO: Game most likely will go out of sync here...
                     char *pPacket = packet;
                     PutPacketByte(pPacket, 249);
                     PutPacketDWord(pPacket, nPlayer);
                     netSendPacketAll(packet, pPacket - packet);
-                    netPlayerQuit(nPlayer);
                     netWaitForEveryone(0);
                 }
                 if (gNetPlayers <= 1)
@@ -1322,7 +1302,8 @@ void netUpdate(void)
             switch (event.type)
             {
             case ENET_EVENT_TYPE_DISCONNECT:
-                initprintf("Lost connection to server\n");
+                enet_packet_destroy(event.packet);
+                initprintf("Disconnected\n");
                 netDeinitialize();
                 netResetToSinglePlayer();
                 gQuitGame = gRestartGame = true;
