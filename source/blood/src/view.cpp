@@ -3331,6 +3331,15 @@ RORHACK:
         printext256(fX-strlen(gTempStr)*4, fY, 31, -1, gTempStr, 1);
     }
 #endif
+
+    sprintf(gTempStr, "forward: %d", gView->atc.forward);
+    printext256(0, 0, whitecol, -1, gTempStr, 0);
+    sprintf(gTempStr, "strafe: %d", gView->atc.strafe);
+    printext256(0, 8, whitecol, -1, gTempStr, 0);
+    sprintf(gTempStr, "turn: %.3f", gView->atc.q16turn/65536.f);
+    printext256(0, 16, whitecol, -1, gTempStr, 0);
+    sprintf(gTempStr, "mlook: %.3f", gView->atc.q16mlook/65536.f);
+    printext256(0, 24, whitecol, -1, gTempStr, 0);
     viewPrintFPS();
     if (gPaused)
     {
