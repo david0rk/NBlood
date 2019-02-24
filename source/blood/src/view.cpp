@@ -3340,6 +3340,10 @@ RORHACK:
     printext256(0, 16, whitecol, -1, gTempStr, 0);
     sprintf(gTempStr, "mlook: %.3f", gView->atc.q16mlook/65536.f);
     printext256(0, 24, whitecol, -1, gTempStr, 0);
+    sprintf(gTempStr, "pos=%d,%d,%d", gView->pSprite->x, gView->pSprite->y, gView->pSprite->z);
+    printext256(0, 32, whitecol, -1, gTempStr, 0);
+    sprintf(gTempStr, "vel=%d,%d,%d", xvel[gView->pSprite->index], yvel[gView->pSprite->index], zvel[gView->pSprite->index]);
+    printext256(0, 40, whitecol, -1, gTempStr, 0);
     viewPrintFPS();
     if (gPaused)
     {
