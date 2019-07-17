@@ -30,7 +30,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "levels.h"
 #include "loadsave.h"
 #include "sfx.h"
+#include "sound.h"
 #include "seq.h"
+#include "gameutil.h"
+#include "actor.h"
 #include "tile.h"
 
 #define kMaxClients 256
@@ -55,7 +58,7 @@ void Seq::Preload(void)
     if ((version & 0xff00) != 0x300)
         ThrowError("Obsolete sequence version");
     for (int i = 0; i < nFrames; i++)
-        tilePreloadTile(frames[i].tile);
+        tilePreloadTile(seqGetTile(&frames[i]));
 }
 
 void Seq::Precache(void)
@@ -65,7 +68,7 @@ void Seq::Precache(void)
     if ((version & 0xff00) != 0x300)
         ThrowError("Obsolete sequence version");
     for (int i = 0; i < nFrames; i++)
-        tilePrecacheTile(frames[i].tile);
+        tilePrecacheTile(seqGetTile(&frames[i]));
 }
 
 void seqPrecacheId(int id)
@@ -93,18 +96,28 @@ void UpdateSprite(int nXSprite, SEQFRAME *pFrame)
     dassert(pSprite->extra == nXSprite);
     if (pSprite->hitag & 2)
     {
-        if (tilesiz[pSprite->picnum].y != tilesiz[pFrame->tile].y || picanm[pSprite->picnum].yofs != picanm[pFrame->tile].yofs
+        if (tilesiz[pSprite->picnum].y != tilesiz[seqGetTile(pFrame)].y || picanm[pSprite->picnum].yofs != picanm[seqGetTile(pFrame)].yofs
             || (pFrame->at3_0 && pFrame->at3_0 != pSprite->yrepeat))
             pSprite->hitag |= 4;
     }
-    pSprite->picnum = pFrame->tile;
+    pSprite->picnum = seqGetTile(pFrame);
     if (pFrame->at5_0)
         pSprite->pal = pFrame->at5_0;
     pSprite->shade = pFrame->at4_0;
-    if (pFrame->at2_0)
-        pSprite->xrepeat = pFrame->at2_0;
-    if (pFrame->at3_0)
-        pSprite->yrepeat = pFrame->at3_0;
+    
+    int scale = xsprite[nXSprite].scale; // SEQ size scaling
+    if (pFrame->at2_0) {
+        if (scale < 0) pSprite->xrepeat = pFrame->at2_0 / abs(scale);
+        else if (scale > 0) pSprite->xrepeat = pFrame->at2_0 * scale;
+        else pSprite->xrepeat = pFrame->at2_0;
+    }
+
+    if (pFrame->at3_0) {
+        if (scale < 0) pSprite->yrepeat = pFrame->at3_0 / abs(scale);
+        else if (scale > 0) pSprite->yrepeat = pFrame->at3_0 * scale;
+        else pSprite->yrepeat = pFrame->at3_0;
+    }
+
     if (pFrame->at1_4)
         pSprite->cstat |= 2;
     else
@@ -154,7 +167,7 @@ void UpdateWall(int nXWall, SEQFRAME *pFrame)
     dassert(nWall >= 0 && nWall < kMaxWalls);
     walltype *pWall = &wall[nWall];
     dassert(pWall->extra == nXWall);
-    pWall->picnum = pFrame->tile;
+    pWall->picnum = seqGetTile(pFrame);
     if (pFrame->at5_0)
         pWall->pal = pFrame->at5_0;
     if (pFrame->at1_4)
@@ -184,7 +197,7 @@ void UpdateMasked(int nXWall, SEQFRAME *pFrame)
     dassert(pWall->extra == nXWall);
     dassert(pWall->nextwall >= 0);
     walltype *pWallNext = &wall[pWall->nextwall];
-    pWall->overpicnum = pWallNext->overpicnum = pFrame->tile;
+    pWall->overpicnum = pWallNext->overpicnum = seqGetTile(pFrame);
     if (pFrame->at5_0)
         pWall->pal = pWallNext->pal = pFrame->at5_0;
     if (pFrame->at1_4)
@@ -236,7 +249,7 @@ void UpdateFloor(int nXSector, SEQFRAME *pFrame)
     dassert(nSector >= 0 && nSector < kMaxSectors);
     sectortype *pSector = &sector[nSector];
     dassert(pSector->extra == nXSector);
-    pSector->floorpicnum = pFrame->tile;
+    pSector->floorpicnum = seqGetTile(pFrame);
     pSector->floorshade = pFrame->at4_0;
     if (pFrame->at5_0)
         pSector->floorpal = pFrame->at5_0;
@@ -249,7 +262,7 @@ void UpdateCeiling(int nXSector, SEQFRAME *pFrame)
     dassert(nSector >= 0 && nSector < kMaxSectors);
     sectortype *pSector = &sector[nSector];
     dassert(pSector->extra == nXSector);
-    pSector->ceilingpicnum = pFrame->tile;
+    pSector->ceilingpicnum = seqGetTile(pFrame);
     pSector->ceilingshade = pFrame->at4_0;
     if (pFrame->at5_0)
         pSector->ceilingpal = pFrame->at5_0;
@@ -264,16 +277,51 @@ void SEQINST::Update(ACTIVE *pActive)
         UpdateWall(pActive->xindex, &pSequence->frames[frameIndex]);
         break;
     case 1:
-        UpdateCeiling(pActive->xindex, &pSequence->frames[frameIndex]);
+        UpdateCeiling(pActive->xindex , &pSequence->frames[frameIndex]);
         break;
     case 2:
         UpdateFloor(pActive->xindex, &pSequence->frames[frameIndex]);
         break;
-    case 3:
+    case 3: 
+    {
+
         UpdateSprite(pActive->xindex, &pSequence->frames[frameIndex]);
         if (pSequence->frames[frameIndex].at6_1)
-            sfxPlay3DSound(&sprite[xsprite[pActive->xindex].reference], pSequence->ata, -1, 0);
+            sfxPlay3DSound(&sprite[xsprite[pActive->xindex].reference], pSequence->ata + Random(pSequence->frames[frameIndex].soundRange), -1, 0);
+
+        spritetype* pSprite = &sprite[xsprite[pActive->xindex].reference];
+        if (pSequence->frames[frameIndex].surfaceSound && zvel[pSprite->xvel] == 0 && xvel[pSprite->xvel] != 0) {
+
+            // by NoOne: add surfaceSound trigger feature
+            if (gUpperLink[pSprite->sectnum] >= 0) break; // don't play surface sound for stacked sectors
+            int surf = tileGetSurfType(pSprite->sectnum + 0x4000); if (!surf) break;
+            static int surfSfxMove[15][4] = {
+                /* {snd1, snd2, gameVolume, myVolume} */
+                {800,801,80,25},
+                {802,803,80,25},
+                {804,805,80,25},
+                {806,807,80,25},
+                {808,809,80,25},
+                {810,811,80,25},
+                {812,813,80,25},
+                {814,815,80,25},
+                {816,817,80,25},
+                {818,819,80,25},
+                {820,821,80,25},
+                {822,823,80,25},
+                {824,825,80,25},
+                {826,827,80,25},
+                {828,829,80,25},
+            };
+
+            int sndId = surfSfxMove[surf][Random(2)];
+            DICTNODE * hRes = gSoundRes.Lookup(sndId, "SFX"); SFX * pEffect = (SFX*)gSoundRes.Load(hRes);
+            sfxPlay3DSoundCP(pSprite, sndId, -1, 0, 0, (surfSfxMove[surf][2] != pEffect->relVol) ? pEffect->relVol : surfSfxMove[surf][3]);
+        }
+        
+
         break;
+    }
     case 4:
         UpdateMasked(pActive->xindex, &pSequence->frames[frameIndex]);
         break;
@@ -342,6 +390,11 @@ void seqSpawn(int a1, int a2, int a3, int a4)
         ThrowError("Invalid sequence %d", a1);
     if ((pSeq->version & 0xff00) != 0x300)
         ThrowError("Sequence %d is obsolete version", a1);
+    if ((pSeq->version & 0xff) == 0x00)
+    {
+        for (int i = 0; i < pSeq->nFrames; i++)
+            pSeq->frames[i].tile2 = 0;
+    }
     pInst->at13 = 1;
     pInst->hSeq = hSeq;
     pInst->pSequence = pSeq;

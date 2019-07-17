@@ -18,7 +18,8 @@ typedef struct { float r, g, b, a; } coltypef;
 extern int32_t rendmode;
 extern float gtang;
 extern float glox1, gloy1;
-extern float gxyaspect, grhalfxdown10x;
+extern double gxyaspect;
+extern float grhalfxdown10x;
 extern float gcosang, gsinang, gcosang2, gsinang2;
 extern float gchang, gshang, gctang, gstang, gvisibility;
 
@@ -44,10 +45,15 @@ void polymost_fillpolygon(int32_t npoints);
 void polymost_initosdfuncs(void);
 void polymost_drawrooms(void);
 
+int32_t polymost_maskWallHasTranslucency(uwalltype const * const wall);
+int32_t polymost_spriteHasTranslucency(uspritetype const * const tspr);
+
 void polymost_resetVertexPointers(void);
 void polymost_disableProgram(void);
 void polymost_resetProgram(void);
 void polymost_setTexturePosSize(vec4f_t const &texturePosSize);
+void polymost_setHalfTexelSize(vec2f_t const &halfTexelSize);
+void polymost_setVisibility(float visibility);
 void polymost_setFogEnabled(char fogEnabled);
 void polymost_useColorOnly(char useColorOnly);
 void polymost_usePaletteIndexing(char usePaletteIndexing);
@@ -55,6 +61,7 @@ void polymost_useDetailMapping(char useDetailMapping);
 void polymost_useGlowMapping(char useGlowMapping);
 void polymost_activeTexture(GLenum texture);
 void polymost_bindTexture(GLenum target, uint32_t textureID);
+void polymost_updatePalette(void);
 void useShaderProgram(uint32_t shaderID);
 
 //POGOTODO: these wrappers won't be needed down the line -- remove them once proper draw call organization is finished
@@ -77,7 +84,7 @@ enum {
 
 void gltexinvalidate(int32_t dapicnum, int32_t dapalnum, int32_t dameth);
 void gltexinvalidatetype(int32_t type);
-int32_t polymost_printext256(int32_t xpos, int32_t ypos, int16_t col, int16_t backcol, const char *name, char fontsize);
+int32_t polymost_printtext256(int32_t xpos, int32_t ypos, int16_t col, int16_t backcol, const char* name, char fontsize);
 
 extern float curpolygonoffset;
 
@@ -86,8 +93,8 @@ extern int32_t shadescale_unbounded;
 extern uint8_t alphahackarray[MAXTILES];
 
 extern int32_t r_usenewshading;
-extern int32_t r_usetileshades;
 extern int32_t r_npotwallmode;
+extern int32_t polymostcenterhoriz;
 
 extern int16_t globalpicnum;
 
@@ -101,9 +108,7 @@ static inline float getshadefactor(int32_t const shade)
 {
     // 8-bit tiles, i.e. non-hightiles and non-models, don't get additional
     // glColor() shading with r_usetileshades!
-    if (videoGetRenderMode() == REND_POLYMOST && r_usetileshades &&
-            !(globalflags & GLOBAL_NO_GL_TILESHADES) &&
-            eligible_for_tileshades(globalpicnum, globalpal))
+    if (videoGetRenderMode() == REND_POLYMOST && !(globalflags & GLOBAL_NO_GL_TILESHADES) && eligible_for_tileshades(globalpicnum, globalpal))
         return 1.f;
 
     if (r_usenewshading == 4)
@@ -118,11 +123,11 @@ static inline float getshadefactor(int32_t const shade)
 
 #define POLYMOST_CHOOSE_FOG_PAL(fogpal, pal) \
     ((fogpal) ? (fogpal) : (pal))
-static FORCE_INLINE int32_t get_floor_fogpal(usectortype const * const sec)
+static FORCE_INLINE int32_t get_floor_fogpal(usectorptr_t const sec)
 {
     return POLYMOST_CHOOSE_FOG_PAL(sec->fogpal, sec->floorpal);
 }
-static FORCE_INLINE int32_t get_ceiling_fogpal(usectortype const * const sec)
+static FORCE_INLINE int32_t get_ceiling_fogpal(usectorptr_t const sec)
 {
     return POLYMOST_CHOOSE_FOG_PAL(sec->fogpal, sec->ceilingpal);
 }
@@ -151,16 +156,16 @@ static FORCE_INLINE int polymost_is_npotmode(void)
 #ifdef NEW_MAP_FORMAT
         g_loadedMapVersion < 10 &&
 #endif
-        r_npotwallmode == 1;
+        r_npotwallmode;
 }
 
 static inline float polymost_invsqrt_approximation(float x)
 {
 #ifdef B_LITTLE_ENDIAN
     float const haf = x * .5f;
-    struct conv { union { uint32_t i; float f; } ; } * const n = (struct conv *)&x;
-    n->i = 0x5f375a86 - (n->i >> 1);
-    return n->f * (1.5f - haf * (n->f * n->f));
+    union { float f; uint32_t i; } n = { x };
+    n.i = 0x5f375a86 - (n.i >> 1);
+    return n.f * (1.5f - haf * (n.f * n.f));
 #else
     // this is the comment
     return 1.f / Bsqrtf(x);
@@ -240,6 +245,7 @@ enum pthtyp_flags {
     PTH_NOTRANSFIX = 256, // fixtransparency() bypassed
 
     PTH_INDEXED = 512,
+    PTH_ONEBITALPHA = 1024,
 };
 
 typedef struct pthtyp_t
@@ -275,7 +281,6 @@ extern int32_t gloadtile_hi(int32_t,int32_t,int32_t,hicreplctyp *,int32_t,pthtyp
 extern int32_t globalnoeffect;
 extern int32_t drawingskybox;
 extern int32_t hicprecaching;
-extern float gyxscale, gxyaspect, ghalfx, grhalfxdown10;
 extern float fcosglobalang, fsinglobalang;
 extern float fxdim, fydim, fydimen, fviewingrange;
 

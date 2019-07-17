@@ -34,16 +34,21 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "pqueue.h"
 #include "triggers.h"
 
-class EventQueue : public PriorityQueue
+class EventQueue
 {
 public:
+    PriorityQueue* PQueue;
+    EventQueue()
+    {
+        PQueue = NULL;
+    }
     bool IsNotEmpty(unsigned int nTime)
     {
-        return fNodeCount > 0 && nTime >= queueItems[1].at0;
+        return PQueue->Size() > 0 && nTime >= PQueue->LowestPriority();
     }
     EVENT ERemove(void)
     {
-        unsigned int node = Remove();
+        unsigned int node = PQueue->Remove();
         return *(EVENT*)&node;
     }
     void Kill(int, int);
@@ -51,7 +56,6 @@ public:
 };
 
 EventQueue eventQ;
-
 void EventQueue::Kill(int a1, int a2)
 {
     EVENT evn = { (unsigned int)a1, (unsigned int)a2, 0, 0 };
@@ -59,63 +63,51 @@ void EventQueue::Kill(int a1, int a2)
     //evn.at1_5 = a2;
 
     short vs = *(short*)&evn;
-    for (unsigned int i = 1; i <= fNodeCount;)
-    {
-        if ((short)queueItems[i].at4 == vs)
-            Delete(i);
-        else
-            i++;
-    }
+    PQueue->Kill([=](unsigned int nItem)->bool {return !memcmp(&nItem, &vs, 2); });
 }
 
 void EventQueue::Kill(int a1, int a2, CALLBACK_ID a3)
 {
     EVENT evn = { (unsigned int)a1, (unsigned int)a2, kCommandCallback, (unsigned int)a3 };
     unsigned int vc = *(unsigned int*)&evn;
-    for (unsigned int i = 1; i <= fNodeCount;)
-    {
-        if (queueItems[i].at4 == vc)
-            Delete(i);
-        else
-            i++;
-    }
+    PQueue->Kill([=](unsigned int nItem)->bool {return nItem == vc; });
 }
 
-struct RXBUCKET
-{
-    unsigned int at0_0 : 13;
-    unsigned int at1_5 : 3;
-};
+//struct RXBUCKET
+//{
+//    unsigned int at0_0 : 13;
+//    unsigned int at1_5 : 3;
+//};
 
 RXBUCKET rxBucket[kMaxChannels+1];
 
 int GetBucketChannel(const RXBUCKET *pRX)
 {
-    switch (pRX->at1_5)
+    switch (pRX->type)
     {
     case 6:
     {
-        int nIndex = pRX->at0_0;
+        int nIndex = pRX->index;
         int nXIndex = sector[nIndex].extra;
         dassert(nXIndex > 0);
-        return xsector[nXIndex].at8_0;
+        return xsector[nXIndex].rxID;
     }
     case 0:
     {
-        int nIndex = pRX->at0_0;
+        int nIndex = pRX->index;
         int nXIndex = wall[nIndex].extra;
         dassert(nXIndex > 0);
-        return xwall[nXIndex].at8_0;
+        return xwall[nXIndex].rxID;
     }
     case 3:
     {
-        int nIndex = pRX->at0_0;
+        int nIndex = pRX->index;
         int nXIndex = sprite[nIndex].extra;
         dassert(nXIndex > 0);
-        return xsprite[nXIndex].at5_2;
+        return xsprite[nXIndex].rxID;
     }
     default:
-        ThrowError("Unexpected rxBucket type %d, index %d", pRX->at1_5, pRX->at0_0);
+        ThrowError("Unexpected rxBucket type %d, index %d", pRX->type, pRX->index);
         break;
     }
     return 0;
@@ -281,18 +273,24 @@ unsigned short bucketHead[1024+1];
 
 void evInit(void)
 {
-    eventQ.fNodeCount = 0;
+    if (eventQ.PQueue)
+        delete eventQ.PQueue;
+    if (VanillaMode())
+        eventQ.PQueue = new VanillaPriorityQueue();
+    else
+        eventQ.PQueue = new StdPriorityQueue();
+    eventQ.PQueue->Clear();
     int nCount = 0;
     for (int i = 0; i < numsectors; i++)
     {
         int nXSector = sector[i].extra;
         if (nXSector >= kMaxXSectors)
             ThrowError("Invalid xsector reference in sector %d", i);
-        if (nXSector > 0 && xsector[nXSector].at8_0 > 0)
+        if (nXSector > 0 && xsector[nXSector].rxID > 0)
         {
             dassert(nCount < kMaxChannels);
-            rxBucket[nCount].at1_5 = 6;
-            rxBucket[nCount].at0_0 = i;
+            rxBucket[nCount].type = 6;
+            rxBucket[nCount].index = i;
             nCount++;
         }
     }
@@ -301,11 +299,11 @@ void evInit(void)
         int nXWall = wall[i].extra;
         if (nXWall >= kMaxXWalls)
             ThrowError("Invalid xwall reference in wall %d", i);
-        if (nXWall > 0 && xwall[nXWall].at8_0 > 0)
+        if (nXWall > 0 && xwall[nXWall].rxID > 0)
         {
             dassert(nCount < kMaxChannels);
-            rxBucket[nCount].at1_5 = 0;
-            rxBucket[nCount].at0_0 = i;
+            rxBucket[nCount].type = 0;
+            rxBucket[nCount].index = i;
             nCount++;
         }
     }
@@ -316,11 +314,11 @@ void evInit(void)
             int nXSprite = sprite[i].extra;
             if (nXSprite >= kMaxXSprites)
                 ThrowError("Invalid xsprite reference in sprite %d", i);
-            if (nXSprite > 0 && xsprite[nXSprite].at5_2 > 0)
+            if (nXSprite > 0 && xsprite[nXSprite].rxID > 0)
             {
                 dassert(nCount < kMaxChannels);
-                rxBucket[nCount].at1_5 = 3;
-                rxBucket[nCount].at0_0 = i;
+                rxBucket[nCount].type = 3;
+                rxBucket[nCount].index = i;
                 nCount++;
             }
         }
@@ -344,19 +342,19 @@ char evGetSourceState(int nType, int nIndex)
     {
         int nXIndex = sector[nIndex].extra;
         dassert(nXIndex > 0 && nXIndex < kMaxXSectors);
-        return xsector[nXIndex].at1_6;
+        return xsector[nXIndex].state;
     }
     case 0:
     {
         int nXIndex = wall[nIndex].extra;
         dassert(nXIndex > 0 && nXIndex < kMaxXWalls);
-        return xwall[nXIndex].at1_6;
+        return xwall[nXIndex].state;
     }
     case 3:
     {
         int nXIndex = sprite[nIndex].extra;
         dassert(nXIndex > 0 && nXIndex < kMaxXSprites);
-        return xsprite[nXIndex].at1_6;
+        return xsprite[nXIndex].state;
     }
     }
     return 0;
@@ -369,9 +367,9 @@ void evSend(int nIndex, int nType, int rxId, COMMAND_ID command)
     else if (command == COMMAND_ID_4)
         command = evGetSourceState(nType, nIndex) ? COMMAND_ID_0 : COMMAND_ID_1;
     EVENT evn;
-    evn.at0_0 = nIndex;
-    evn.at1_5 = nType;
-    evn.at2_0 = command;
+    evn.index = nIndex;
+    evn.type = nType;
+    evn.cmd = command;
     if (rxId > 0)
     {
         switch (rxId)
@@ -389,6 +387,10 @@ void evSend(int nIndex, int nType, int rxId, COMMAND_ID command)
             return;
         case 5:
             levelEndLevel(1);
+            return;
+        // By NoOne: finished level and load custom level ¹ via numbered command.
+        case kGDXChannelEndLevelCustom:
+            levelEndLevelCustom(command - 64);
             return;
         case 1:
             if (command < COMMAND_ID_64)
@@ -417,7 +419,7 @@ void evSend(int nIndex, int nType, int rxId, COMMAND_ID command)
                 if (nXSprite > 0)
                 {
                     XSPRITE *pXSprite = &xsprite[nXSprite];
-                    if (pXSprite->at5_2 == rxId)
+                    if (pXSprite->rxID == rxId)
                         trMessageSprite(nSprite, evn);
                 }
             }
@@ -433,7 +435,7 @@ void evSend(int nIndex, int nType, int rxId, COMMAND_ID command)
                 if (nXSprite > 0)
                 {
                     XSPRITE *pXSprite = &xsprite[nXSprite];
-                    if (pXSprite->at5_2 == rxId)
+                    if (pXSprite->rxID == rxId)
                         trMessageSprite(nSprite, evn);
                 }
             }
@@ -442,19 +444,19 @@ void evSend(int nIndex, int nType, int rxId, COMMAND_ID command)
     }
     for (int i = bucketHead[rxId]; i < bucketHead[rxId+1]; i++)
     {
-        if (evn.at1_5 != rxBucket[i].at1_5 || evn.at0_0 != rxBucket[i].at0_0)
+        if (evn.type != rxBucket[i].type || evn.index != rxBucket[i].index)
         {
-            switch (rxBucket[i].at1_5)
+            switch (rxBucket[i].type)
             {
             case 6:
-                trMessageSector(rxBucket[i].at0_0, evn);
+                trMessageSector(rxBucket[i].index, evn);
                 break;
             case 0:
-                trMessageWall(rxBucket[i].at0_0, evn);
+                trMessageWall(rxBucket[i].index, evn);
                 break;
             case 3:
             {
-                int nSprite = rxBucket[i].at0_0;
+                int nSprite = rxBucket[i].index;
                 spritetype *pSprite = &sprite[nSprite];
                 if (pSprite->hitag&32)
                     continue;
@@ -462,7 +464,7 @@ void evSend(int nIndex, int nType, int rxId, COMMAND_ID command)
                 if (nXSprite > 0)
                 {
                     XSPRITE *pXSprite = &xsprite[nXSprite];
-                    if (pXSprite->at5_2 > 0)
+                    if (pXSprite->rxID > 0)
                         trMessageSprite(nSprite, evn);
                 }
                 break;
@@ -480,21 +482,21 @@ void evPost(int nIndex, int nType, unsigned int nDelta, COMMAND_ID command)
     else if (command == COMMAND_ID_4)
         command = evGetSourceState(nType, nIndex) ? COMMAND_ID_0 : COMMAND_ID_1;
     EVENT evn;
-    evn.at0_0 = nIndex;
-    evn.at1_5 = nType;
-    evn.at2_0 = command;
+    evn.index = nIndex;
+    evn.type = nType;
+    evn.cmd = command;
     // Inlined?
-    eventQ.Insert(gFrameClock+nDelta, *(unsigned int*)&evn);
+    eventQ.PQueue->Insert(gFrameClock+nDelta, *(unsigned int*)&evn);
 }
 
 void evPost(int nIndex, int nType, unsigned int nDelta, CALLBACK_ID a4)
 {
     EVENT evn;
-    evn.at0_0 = nIndex;
-    evn.at1_5 = nType;
-    evn.at2_0 = kCommandCallback;
+    evn.index = nIndex;
+    evn.type = nType;
+    evn.cmd = kCommandCallback;
     evn.funcID = a4;
-    eventQ.Insert(gFrameClock+nDelta, *(unsigned int*)&evn);
+    eventQ.PQueue->Insert(gFrameClock+nDelta, *(unsigned int*)&evn);
 }
 
 void evProcess(unsigned int nTime)
@@ -514,24 +516,24 @@ void evProcess(unsigned int nTime)
     while(eventQ.IsNotEmpty(nTime))
     {
         EVENT event = eventQ.ERemove();
-        if (event.at2_0 == kCommandCallback)
+        if (event.cmd == kCommandCallback)
         {
             dassert(event.funcID < kCallbackMax);
             dassert(gCallback[event.funcID] != NULL);
-            gCallback[event.funcID](event.at0_0);
+            gCallback[event.funcID](event.index);
         }
         else
         {
-            switch (event.at1_5)
+            switch (event.type)
             {
             case 6:
-                trMessageSector(event.at0_0, event);
+                trMessageSector(event.index, event);
                 break;
             case 0:
-                trMessageWall(event.at0_0, event);
+                trMessageWall(event.index, event);
                 break;
             case 3:
-                trMessageSprite(event.at0_0, event);
+                trMessageSprite(event.index, event);
                 break;
             }
         }
@@ -557,14 +559,46 @@ public:
 
 void EventQLoadSave::Load()
 {
+    if (eventQ.PQueue)
+        delete eventQ.PQueue;
     Read(&eventQ, sizeof(eventQ));
+    if (VanillaMode())
+        eventQ.PQueue = new VanillaPriorityQueue();
+    else
+        eventQ.PQueue = new StdPriorityQueue();
+    int nEvents;
+    Read(&nEvents, sizeof(nEvents));
+    for (int i = 0; i < nEvents; i++)
+    {
+        EVENT event;
+        unsigned int eventtime;
+        Read(&eventtime, sizeof(eventtime));
+        Read(&event, sizeof(event));
+        eventQ.PQueue->Insert(eventtime, *(unsigned int*)&event);
+    }
     Read(rxBucket, sizeof(rxBucket));
     Read(bucketHead, sizeof(bucketHead));
 }
 
 void EventQLoadSave::Save()
 {
+    EVENT events[1024];
+    unsigned int eventstime[1024];
     Write(&eventQ, sizeof(eventQ));
+    int nEvents = eventQ.PQueue->Size();
+    Write(&nEvents, sizeof(nEvents));
+    for (int i = 0; i < nEvents; i++)
+    {
+        eventstime[i] = eventQ.PQueue->LowestPriority();
+        events[i] = eventQ.ERemove();
+        Write(&eventstime[i], sizeof(eventstime[i]));
+        Write(&events[i], sizeof(events[i]));
+    }
+    dassert(eventQ.PQueue->Size() == 0);
+    for (int i = 0; i < nEvents; i++)
+    {
+        eventQ.PQueue->Insert(eventstime[i], *(unsigned int*)&events[i]);
+    }
     Write(rxBucket, sizeof(rxBucket));
     Write(bucketHead, sizeof(bucketHead));
 }

@@ -31,6 +31,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "blood.h"
 #include "config.h"
 #include "resource.h"
+#include "tile.h"
 
 void qloadvoxel(int32_t nVoxel)
 {
@@ -46,6 +47,9 @@ void qloadvoxel(int32_t nVoxel)
     for (int i = 0; i < MAXVOXMIPS; i++)
     {
         int nSize = *((int*)pVox);
+#if B_BIG_ENDIAN == 1
+        nSize = B_LITTLE32(nSize);
+#endif
         pVox += 4;
         voxoff[nVoxel][i] = (intptr_t)pVox;
         pVox += nSize;
@@ -96,6 +100,10 @@ int tileInit(char a1, const char *a2)
     if (hFile != -1)
     {
         kread(hFile, voxelIndex, sizeof(voxelIndex));
+#if B_BIG_ENDIAN == 1
+        for (int i = 0; i < kMaxTiles; i++)
+            voxelIndex[i] = B_LITTLE16(voxelIndex[i]);
+#endif
         kclose(hFile);
     }
     hFile = kopen4loadfrommod("SHADE.DAT", 0);
@@ -110,24 +118,36 @@ int tileInit(char a1, const char *a2)
             SetBitString((char*)voxreserve, voxelIndex[i]);
     }
 
+    artLoaded = 1;
+
+    #ifdef USE_OPENGL
+    PolymostProcessVoxels_Callback = tileProcessGLVoxels;
+    #endif
+
+    return 1;
+}
+
+#ifdef USE_OPENGL
+void tileProcessGLVoxels(void)
+{
+    static bool voxInit = false;
+    if (voxInit)
+        return;
+    voxInit = true;
     for (int i = 0; i < kMaxVoxels; i++)
     {
         DICTNODE *hVox = gSysRes.Lookup(i, "KVX");
         if (!hVox)
             continue;
         char *pVox = (char*)gSysRes.Load(hVox);
-#ifdef USE_OPENGL
         voxmodels[i] = loadkvxfrombuf(pVox, hVox->size);
-#endif
     }
-    artLoaded = 1;
-
-    return 1;
 }
+#endif
 
 char * tileLoadTile(int nTile)
 {
-    tileLoad(nTile);
+    if (!waloff[nTile]) tileLoad(nTile);
     return (char*)waloff[nTile];
 }
 

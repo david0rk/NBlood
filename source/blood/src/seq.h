@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 //-------------------------------------------------------------------------
 #pragma once
 #include "resource.h"
+
 struct SEQFRAME {
     unsigned int tile : 12;
     unsigned int at1_4 : 1; // transparent
@@ -40,7 +41,10 @@ struct SEQFRAME {
     unsigned int at6_2 : 1; // invisible
     unsigned int at6_3 : 1; //
     unsigned int at6_4 : 1; //
-    unsigned int pad : 11;
+    unsigned int tile2 : 4;
+    unsigned soundRange : 4; // (by NoOne) random sound range relative to global SEQ sound
+    unsigned surfaceSound : 1; // (by NoOne) trigger surface sound when moving / touching
+    unsigned reserved : 2;
 };
 
 struct Seq {
@@ -64,7 +68,7 @@ struct ACTIVE
 struct SEQINST
 {
     DICTNODE *hSeq;
-    Seq *pSequence; // at4
+    Seq *pSequence; // mass
     int at8;
     int atc;
     short at10;
@@ -72,6 +76,11 @@ struct SEQINST
     char at13;
     void Update(ACTIVE *pActive);
 };
+
+inline int seqGetTile(SEQFRAME* pFrame)
+{
+    return pFrame->tile+(pFrame->tile2<<12);
+}
 
 int seqRegisterClient(void(*pClient)(int, int));
 void seqPrecacheId(int id);

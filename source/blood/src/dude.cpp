@@ -56,32 +56,32 @@ DUDEINFO dudeInfo[kDudeMax-kDudeBase] =
         0
     },
     {
-        4096,
-        40,
-        70,
-        1200,
-        48,
-        41,
-        20,
-        10240,
-        51200,
-        512,
-        0,
-        10,
-        8,
-        256,
-        16,
-        32768,
-        1,
-        46603,
-        34952,
-        13981,
-        256,
-        15, -1, -1,
-        256, 256, 96, 256, 256, 256, 192,
-        0, 0, 0, 0, 0, 0, 0,
-        0,
-        0
+        4096, //seqStartId
+        40, // startHp
+        70, // mass
+        1200, // ???
+        48, // clipdist
+        41, // eye height
+        20, // aim height
+        10240, // hear dist
+        51200, // see dist
+        512, // periphery
+        0, // melee distance
+        10, // flee health
+        8, // hinder damage
+        256, // change target chance
+        16, // change target chance to same type
+        32768, // alert chance
+        1, // lockout
+        46603, // front speed
+        34952, // side speed
+        13981, // back speed
+        256, // ang speed
+        15, -1, -1, // gib type
+        256, 256, 96, 256, 256, 256, 192, // start damage
+        0, 0, 0, 0, 0, 0, 0, // real damage
+        0, // ???
+        0 // ???
     },
     {
         11520,
@@ -1538,11 +1538,74 @@ DUDEINFO dudeInfo[kDudeMax-kDudeBase] =
         0, 0, 0, 0, 0, 0, 0,
         0,
         0
+    },
+    //254 -  kGDXUniversalCultist
+    {
+        11520,		// start sequence ID
+        85,		// start health
+        75,			// mass
+        120,
+        48,			// clip distance
+        48,			// eye above z
+        20,
+        10240,		// hear distance
+        51200,	// seeing distance
+        kAng120,	// vision periphery
+        //			    0,
+        618,			// melee distance
+        5,			// flee health
+        12,			// hinder damage
+        0x0100,		// change target chance
+        0x0010,		// change target to kin chance
+        0x8000,		// alertChance
+        0,		// lockout
+        46603,		// frontSpeed
+        34952,		// sideSpeed
+        13981,		// backSpeed
+        256,		// angSpeed
+        //			    0,
+        7,	-1, 18,		// nGibType
+        256, 256, 128, 256, 256, 256, 192,
+        0, 0, 0, 0, 0, 0, 0,
+        0,
+        0
+    },
+    //255 -  kGDXGenDudeBurning
+    {
+        4096,		// start sequence ID
+        25,			// start health
+        5,			// mass
+        120,
+        48,			// clip distance
+        41,			// eye above z
+        20,
+        12800,		// hear distance
+        51200,		// seeing distance
+        kAng60,	// vision periphery
+        //						0,
+        0,			// melee distance
+        10,			// flee health
+        10,			// hinder damage
+        0x0100,		// change target chance
+        0x0010,		// change target to kin chance
+        0x8000,		// alertChance
+        true,		// lockout
+        58254,			// frontSpeed
+        46603,			// sideSpeed
+        34952,			// backSpeed
+        384,			// angSpeed
+        //              0,
+        7,	-1, -1,		// nGibType
+        256, 256, 256, 256, 256, 256, 256,
+        0, 0, 0, 0, 0, 0, 0,
+        0,
+        0
     }
 };
 
-DUDEINFO gPlayerTemplate[2] = 
+DUDEINFO gPlayerTemplate[4] = 
 {
+    // normal human
     {
         0x2f00,
         100,
@@ -1571,6 +1634,8 @@ DUDEINFO gPlayerTemplate[2] =
         0,
         0
     },
+
+    // normal beast
     {
         0x2900,
         100,
@@ -1598,5 +1663,65 @@ DUDEINFO gPlayerTemplate[2] =
         0, 0, 0, 0, 0, 0, 0,
         0,
         0
-    }
+    },
+
+    // shrink human
+    {
+        12032,
+        100,
+        10, // mass
+        1200,
+        16, // clipdist
+        0,
+        0x10,
+        0x800,
+        0xc800,
+        0x155,
+        0,
+        10,
+        10,
+        0x100,
+        0x10,
+        0x8000,
+        0x1,
+        0,
+        0,
+        0,
+        0x40,
+        15, -1, -1, // gib type
+        1024, 1024, 1024, 1024, 256, 1024, 1024, //damage shift
+        0, 0, 0, 0, 0, 0, 0,
+        0,
+        0
+    },
+
+     // grown human
+     {
+         12032,
+         100,
+         1100, // mass
+         1200,
+         100, // clipdist
+         0,
+         0x10,
+         0x800,
+         0xc800,
+         0x155,
+         0,
+         10,
+         10,
+         0x100,
+         0x10,
+         0x8000,
+         0x1,
+         0,
+         0,
+         0,
+         0x40,
+         15, 7, 7, // gib type
+         64, 64, 64, 64, 256, 64, 64, // damage shift
+         0, 0, 0, 0, 0, 0, 0,
+         0,
+         0
+     },
 };

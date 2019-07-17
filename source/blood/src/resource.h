@@ -110,6 +110,8 @@ public:
     static void RemoveMRU(CACHENODE *h);
     int Size(DICTNODE*h) { return h->size; }
     void FNAddFiles(fnlist_t *fnlist, const char *pattern);
+    void PrecacheSounds(void);
+    void RemoveNode(DICTNODE* pNode);
 
     DICTNODE *dict;
     DICTNODE **indexName;

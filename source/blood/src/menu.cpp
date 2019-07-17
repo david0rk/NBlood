@@ -51,6 +51,7 @@ void SetSoundVol(CGameMenuItemSlider *);
 void SetCDVol(CGameMenuItemSlider *);
 void SetDoppler(CGameMenuItemZBool *);
 void SetCrosshair(CGameMenuItemZBool *);
+void SetCenterHoriz(CGameMenuItemZBool *);
 void SetShowWeapons(CGameMenuItemZBool *);
 void SetSlopeTilting(CGameMenuItemZBool *);
 void SetViewBobbing(CGameMenuItemZBool *);
@@ -398,12 +399,13 @@ CGameMenuItemTitle itemOptionsDisplayTitle("DISPLAY SETUP", 1, 160, 20, 2038);
 CGameMenuItemChain itemOptionsDisplayColor("COLOR CORRECTION", 3, 66, 60, 180, 0, &menuOptionsDisplayColor, -1, NULL, 0);
 CGameMenuItemChain itemOptionsDisplayMode("VIDEO MODE", 3, 66, 70, 180, 0, &menuOptionsDisplayMode, -1, SetupVideoModeMenu, 0);
 CGameMenuItemZBool itemOptionsDisplayBoolCrosshair("CROSSHAIR:", 3, 66, 80, 180, gAimReticle, SetCrosshair, NULL, NULL);
-CGameMenuItemZBool itemOptionsDisplayBoolLevelStats("LEVEL STATS:", 3, 66, 90, 180, gLevelStats, SetLevelStats, NULL, NULL);
-CGameMenuItemZBool itemOptionsDisplayBoolMessages("MESSAGES:", 3, 66, 100, 180, gMessageState, SetMessages, NULL, NULL);
-CGameMenuItemZBool itemOptionsDisplayBoolWidescreen("WIDESCREEN:", 3, 66, 110, 180, r_usenewaspect, SetWidescreen, NULL, NULL);
-CGameMenuItemSlider itemOptionsDisplayFOV("FOV:", 3, 66, 120, 180, &gFov, 75, 120, 5, SetFOV, -1, -1, kMenuSliderValue);
+CGameMenuItemZBool itemOptionsDisplayBoolCenterHoriz("CENTER HORIZON LINE:", 3, 66, 90, 180, gCenterHoriz, SetCenterHoriz, NULL, NULL);
+CGameMenuItemZBool itemOptionsDisplayBoolLevelStats("LEVEL STATS:", 3, 66, 100, 180, gLevelStats, SetLevelStats, NULL, NULL);
+CGameMenuItemZBool itemOptionsDisplayBoolMessages("MESSAGES:", 3, 66, 110, 180, gMessageState, SetMessages, NULL, NULL);
+CGameMenuItemZBool itemOptionsDisplayBoolWidescreen("WIDESCREEN:", 3, 66, 120, 180, r_usenewaspect, SetWidescreen, NULL, NULL);
+CGameMenuItemSlider itemOptionsDisplayFOV("FOV:", 3, 66, 130, 180, &gFov, 75, 130, 5, SetFOV, -1, -1, kMenuSliderValue);
 #ifdef USE_OPENGL
-CGameMenuItemChain itemOptionsDisplayPolymost("POLYMOST SETUP", 3, 66, 130, 180, 0, &menuOptionsDisplayPolymost, -1, SetupVideoPolymostMenu, 0);
+CGameMenuItemChain itemOptionsDisplayPolymost("POLYMOST SETUP", 3, 66, 140, 180, 0, &menuOptionsDisplayPolymost, -1, SetupVideoPolymostMenu, 0);
 #endif
 
 const char *pzRendererStrings[] = {
@@ -522,7 +524,7 @@ void UpdateTexCache(CGameMenuItemZCycle *pItem);
 void UpdateDetailTex(CGameMenuItemZBool *pItem);
 void UpdateGlowTex(CGameMenuItemZBool *pItem);
 void Update3DModels(CGameMenuItemZBool *pItem);
-void UpdatePaletteEmulation(CGameMenuItemZBool *pItem);
+void UpdateDeliriumBlur(CGameMenuItemZBool *pItem);
 #ifdef USE_OPENGL
 void PreDrawDisplayPolymost(CGameMenuItem *pItem);
 CGameMenuItemTitle itemOptionsDisplayPolymostTitle("POLYMOST SETUP", 1, 160, 20, 2038);
@@ -535,7 +537,7 @@ CGameMenuItemZCycle itemOptionsDisplayPolymostTexCache("ON-DISK TEXTURE CACHE:",
 CGameMenuItemZBool itemOptionsDisplayPolymostDetailTex("DETAIL TEXTURES:", 3, 66, 120, 180, 0, UpdateDetailTex, NULL, NULL);
 CGameMenuItemZBool itemOptionsDisplayPolymostGlowTex("GLOW TEXTURES:", 3, 66, 130, 180, 0, UpdateGlowTex, NULL, NULL);
 CGameMenuItemZBool itemOptionsDisplayPolymost3DModels("3D MODELS:", 3, 66, 140, 180, 0, Update3DModels, NULL, NULL);
-CGameMenuItemZBool itemOptionsDisplayPolymostPaletteEmulation("PALETTE EMULATION:", 3, 66, 150, 180, 0, UpdatePaletteEmulation, NULL, NULL);
+CGameMenuItemZBool itemOptionsDisplayPolymostDeliriumBlur("DELIRIUM EFFECT BLUR:", 3, 66, 150, 180, 0, UpdateDeliriumBlur, NULL, NULL);
 #endif
 
 void UpdateSoundToggle(CGameMenuItemZBool *pItem);
@@ -1106,6 +1108,7 @@ void SetupOptionsMenu(void)
     menuOptionsDisplay.Add(&itemOptionsDisplayColor, true);
     menuOptionsDisplay.Add(&itemOptionsDisplayMode, false);
     menuOptionsDisplay.Add(&itemOptionsDisplayBoolCrosshair, false);
+    menuOptionsDisplay.Add(&itemOptionsDisplayBoolCenterHoriz, false);
     menuOptionsDisplay.Add(&itemOptionsDisplayBoolLevelStats, false);
     menuOptionsDisplay.Add(&itemOptionsDisplayBoolMessages, false);
     menuOptionsDisplay.Add(&itemOptionsDisplayBoolWidescreen, false);
@@ -1115,6 +1118,7 @@ void SetupOptionsMenu(void)
 #endif
     menuOptionsDisplay.Add(&itemBloodQAV, false);
     itemOptionsDisplayBoolCrosshair.at20 = gAimReticle;
+    itemOptionsDisplayBoolCenterHoriz.at20 = gCenterHoriz;
     itemOptionsDisplayBoolLevelStats.at20 = gLevelStats;
     itemOptionsDisplayBoolMessages.at20 = gMessageState;
     itemOptionsDisplayBoolWidescreen.at20 = r_usenewaspect;
@@ -1179,16 +1183,16 @@ void SetupOptionsMenu(void)
 
 #ifdef USE_OPENGL
     menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostTitle, false);
-    menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostTextureMode, true);
-    menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostAnisotropy, false);
-    menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostTrueColorTextures, false);
+    //menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostTextureMode, true);
+    //menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostAnisotropy, false);
+    menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostTrueColorTextures, true);
     menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostTexQuality, false);
     menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostPreloadCache, false);
     menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostTexCache, false);
     menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostDetailTex, false);
     menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostGlowTex, false);
     menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymost3DModels, false);
-    menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostPaletteEmulation, false);
+    menuOptionsDisplayPolymost.Add(&itemOptionsDisplayPolymostDeliriumBlur, false);
     menuOptionsDisplayPolymost.Add(&itemBloodQAV, false);
 
     itemOptionsDisplayPolymostTexQuality.pPreDrawCallback = PreDrawDisplayPolymost;
@@ -1196,7 +1200,6 @@ void SetupOptionsMenu(void)
     itemOptionsDisplayPolymostTexCache.pPreDrawCallback = PreDrawDisplayPolymost;
     itemOptionsDisplayPolymostDetailTex.pPreDrawCallback = PreDrawDisplayPolymost;
     itemOptionsDisplayPolymostGlowTex.pPreDrawCallback = PreDrawDisplayPolymost;
-    itemOptionsDisplayPolymostPaletteEmulation.pPreDrawCallback = PreDrawDisplayPolymost;
 #endif
 
     menuOptionsSound.Add(&itemOptionsSoundTitle, false);
@@ -1342,6 +1345,11 @@ void SetDoppler(CGameMenuItemZBool *pItem)
 void SetCrosshair(CGameMenuItemZBool *pItem)
 {
     gAimReticle = pItem->at20;
+}
+
+void SetCenterHoriz(CGameMenuItemZBool *pItem)
+{
+    gCenterHoriz = pItem->at20;
 }
 
 void ResetKeys(CGameMenuItemChain *)
@@ -1662,7 +1670,7 @@ void SetupVideoPolymostMenu(CGameMenuItemChain *pItem)
     itemOptionsDisplayPolymostDetailTex.at20 = r_detailmapping;
     itemOptionsDisplayPolymostGlowTex.at20 = r_glowmapping;
     itemOptionsDisplayPolymost3DModels.at20 = usemodels;
-    itemOptionsDisplayPolymostPaletteEmulation.at20 = r_usetileshades;
+    itemOptionsDisplayPolymostDeliriumBlur.at20 = gDeliriumBlur;
 }
 
 void UpdateTextureMode(CGameMenuItemZCycle *pItem)
@@ -1725,9 +1733,9 @@ void Update3DModels(CGameMenuItemZBool *pItem)
     usemodels = pItem->at20;
 }
 
-void UpdatePaletteEmulation(CGameMenuItemZBool *pItem)
+void UpdateDeliriumBlur(CGameMenuItemZBool *pItem)
 {
-    r_usetileshades = pItem->at20;
+    gDeliriumBlur = pItem->at20;
 }
 
 void PreDrawDisplayPolymost(CGameMenuItem *pItem)
@@ -1742,8 +1750,6 @@ void PreDrawDisplayPolymost(CGameMenuItem *pItem)
         pItem->bEnable = usehightile;
     else if (pItem == &itemOptionsDisplayPolymostGlowTex)
         pItem->bEnable = usehightile;
-    else if (pItem == &itemOptionsDisplayPolymostPaletteEmulation)
-        pItem->bEnable = !(videoGetRenderMode() == REND_POLYMOST && r_useindexedcolortextures);
 }
 #endif
 

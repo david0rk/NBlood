@@ -237,6 +237,11 @@ void clearskins(int32_t type)
                 glDeleteTextures(1, &v->texid[j]);
                 v->texid[j] = 0;
             }
+        if (v->texid8bit)
+        {
+            glDeleteTextures(1, &v->texid8bit);
+            v->texid8bit = 0;
+        }
     }
 }
 
@@ -2217,8 +2222,6 @@ static int32_t polymost_md3draw(md3model_t *m, const uspritetype *tspr)
     if ((grhalfxdown10x >= 0) ^((globalorientation&8) != 0) ^((globalorientation&4) != 0)) glFrontFace(GL_CW); else glFrontFace(GL_CCW);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
-
-    glEnable(GL_TEXTURE_2D);
 
     // tinting
     pc[0] = pc[1] = pc[2] = ((float)numshades - min(max((globalshade * shadescale) + m->shadeoff, 0.f), (float)numshades)) / (float)numshades;
